@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: 第四爱百科（Fourth Love Encyclopedia）
+message: 若在研究或创作中用到本库的统计结论，请按此引用。
+type: dataset
+authors:
+  - name: Horace Maxwell
+    alias: Horace-Maxwell
+repository-code: https://github.com/Horace-Maxwell/fourth-love-encyclopedia
+abstract: >-
+  中文 GB／第四爱／女尊类型的研究与创作参考库。含 35 个套路结构、
+  16 个名场面模板、444 条日常桥段、36 型人设原型与 350 条术语词条，
+  统计基础为 5,668 篇 / 5.77 亿字的本地语料（语料本身不公开发布）。
+  库内的量化结论均可复算：类型学分布见 aggregate_corpus.py，
+  桥段节拍共现见 mine_vignette.py，文风阈值见 ai_taste.py --baseline。
+keywords:
+  - 第四爱
+  - 女攻男受
+  - 女尊
+  - 中文网络文学
+  - 类型研究
+  - 创作参考
+license: CC-BY-NC-SA-4.0

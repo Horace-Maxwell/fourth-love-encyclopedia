@@ -1,0 +1,29 @@
+#!/bin/sh
+# 提交前自动跑发布风险扫描与规约检查。
+# 装法：git config core.hooksPath .githooks
+# 确需跳过：git commit --no-verify（应当罕见，跳过的理由要写进提交信息）
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+echo "── pre-commit: 发布风险扫描 ──"
+python3 _脚本/preflight.py || {
+  echo ""
+  echo "preflight 未通过。修好再提交；确需跳过用 git commit --no-verify。"
+  exit 1
+}
+
+echo "── pre-commit: 数字漂移自查 ──"
+python3 _脚本/sync_index.py --check || {
+  echo ""
+  echo "数字漂移。先跑 python3 _脚本/run.py rebuild，再把报出的手写数字改成真值。"
+  echo "（README 徽章漂移 106.6→108.5 那次就是因为这一道闸缺席才进了公开仓库。）"
+  exit 1
+}
+
+echo "── pre-commit: 规约合规 ──"
+python3 _脚本/check_compliance.py || {
+  echo ""
+  echo "check_compliance 未通过。修好再提交。"
+  exit 1
+}

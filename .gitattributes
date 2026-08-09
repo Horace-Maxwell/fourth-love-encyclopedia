@@ -1,0 +1,14 @@
+# 统一换行，避免跨平台 clone 之后整库 diff 变红
+* text=auto eol=lf
+
+# 让 GitHub 的语言统计不把这个库算成 Python 项目：
+# 正文才是主体，脚本是工具
+*.md linguist-documentation=false
+*.md linguist-detectable=true
+_脚本/* linguist-vendored=false
+11-模板包/**/*.json linguist-generated=true
+12-导出/* linguist-generated=true
+index.html linguist-generated=true
+
+# 生成物在 PR 里默认折叠，避免几百个 JSON 淹掉真正的改动
+14-桥段库/00-总表.md linguist-generated=true

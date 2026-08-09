@@ -1,0 +1,54 @@
+name: 规约检查
+
+# 三道闸原本只在本地 pre-commit 上跑，绕过它只要一个 --no-verify。
+# 搬到 CI 上，任何进入 main 的改动都要过一遍同样的判据。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 本仓库不含语料与 10-藏书索引（本机私有，见 .gitignore）。
+      # 依赖它们的脚本会自己跳过，这是设计好的降级路径，不是失败。
+      - name: 规约合规（A–N 全部检查项）
+        run: python3 _脚本/check_compliance.py
+
+      - name: 去 AI 味（阈值来自 100 篇真人小说实测）
+        run: python3 _脚本/ai_taste.py --lib
+
+      - name: 卡的开场白（按小说标准）
+        run: python3 _脚本/ai_taste.py --cards
+
+      - name: 数字漂移自查
+        run: python3 _脚本/sync_index.py --check
+
+      - name: 发布风险扫描（本机路径 / 密钥 / 藏书清单）
+        run: python3 _脚本/preflight.py
+
+      - name: 卡片可被 SillyTavern 导入
+        run: |
+          python3 - <<'PY'
+          import json, sys, glob
+          sys.path.insert(0, "_脚本")
+          from card_format import importable
+          bad = []
+          for f in glob.glob("11-模板包/**/*.json", recursive=True):
+              if "世界书" in f:
+                  continue
+              ok, why = importable(json.load(open(f, encoding="utf-8")))
+              if not ok:
+                  bad.append(f"{f}: {why}")
+          print(f"检查 {len(glob.glob('11-模板包/**/*.json', recursive=True))} 个 JSON，不可导入 {len(bad)} 个")
+          for b in bad[:10]:
+              print(" ", b)
+          sys.exit(1 if bad else 0)
+          PY

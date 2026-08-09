@@ -1,0 +1,21 @@
+# 全库统一为 UTF-8 + LF + 行尾不留空格。
+# 中文文档混用 CRLF 会让 diff 整篇变红，看不出真正改了什么。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown 的行尾两空格是硬换行语法，不能裁
+trim_trailing_whitespace = false
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
