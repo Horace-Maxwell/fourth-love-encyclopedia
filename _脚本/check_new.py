@@ -18,6 +18,7 @@ import sys
 import json
 import hashlib
 import argparse
+import tempfile
 from pathlib import Path
 from collections import Counter
 
@@ -96,8 +97,9 @@ def main():
         for f in truly_new[:8]:
             print(f"    · {Path(f).name[:70]}")
 
-        out = Path("/private/tmp/claude-501/-Users-horacedong-Desktop-GB/"
-                   "c42efaf9-510a-4276-8c96-0a862fb9f5a2/scratchpad/truly_new.txt")
+        # 清单落临时目录，不落库内（落进去就进公开仓库、被检查器扫）。
+        # 原先这里硬编码着某一次会话的 scratchpad 路径，换会话就写不出去。
+        out = Path(os.environ.get("GB_TMP") or tempfile.gettempdir()) / "truly_new.txt"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("\n".join(truly_new), encoding="utf-8")
         print(f"\n  清单已写入 {out}")

@@ -23,9 +23,18 @@ QUOTED = re.compile(
     r"|“(?:[^“”\n]|‘[^‘’\n]*’)*”")
 
 
+# 剥掉的引文留一个占位符，不留空。留空会把引文两边的字**粘到一起**，
+# 制造出原文里并不存在的相邻关系，而判据正是按相邻关系写的：
+#   原文  他可以说「我不喜欢你去见他」，但不能说「你敢去试试」
+#   剥空  他可以说，但不能说            ← 「可以说，」凭空出现，被判成虚词
+#   占位  他可以说○，但不能说○          ← 判据看到的是实义用法，正确放行
+# 占位符选 ○（U+25CB）：不在 [一-鿿] 里，不进字数；也不是标点，不会自己触发判据。
+PLACEHOLDER = "○"
+
+
 def strip_quotes(t: str, min_cn: int = 6) -> str:
     """剥掉成句引文。短于 min_cn 汉字的当术语标记，保留。"""
     def sub(m):
         inner = m.group(0)[1:-1]
-        return "" if len(re.findall(r"[一-鿿]", inner)) >= min_cn else m.group(0)
+        return PLACEHOLDER if len(re.findall(r"[一-鿿]", inner)) >= min_cn else m.group(0)
     return QUOTED.sub(sub, t)

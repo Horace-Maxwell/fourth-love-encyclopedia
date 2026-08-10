@@ -22,6 +22,9 @@ CORPUS = Path(os.environ.get("GB_CORPUS") or LIB.parent / "素材语料")
 
 INDEX_DIR = LIB / "10-藏书索引"
 JSONL = INDEX_DIR / "_语料库.jsonl"
+# 逐部作品的精读笔记（原 09 卷）。已下架：本地保留、.gitignore 排除、不入库，
+# 理由见 00-编纂规约/03-版权与内容红线 1.4。fresh clone 上这个目录不存在，
+# 用它之前先 .is_dir()——glob 不报错，但据此算出的计数会是假的 0。
 CARDS_DIR = LIB / "09-拆解卡"
 EXPORT_DIR = LIB / "12-导出"
 TEMPLATE_DIR = LIB / "11-模板包"

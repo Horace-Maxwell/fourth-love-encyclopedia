@@ -10,7 +10,8 @@
   改文档只能修一次，改生成器才能一劳永逸。
 
 口径定义（全库共用一份，别处引用必须与此一致）：
-  篇数   —— 库内 .md 文件数（不含 素材语料/_整理后）
+  篇数   —— **进仓库的** .md 文件数（不含 _整理后 与 .gitignore 的目录）
+           印在 README 上的数必须是别人 clone 后能数出来的数
   万字   —— **汉字数**。同时给出字符数以免误读，但「万字」一律指汉字。
   语料   —— 见 aggregate_corpus.CANON，本脚本直接引用，不重算
   桥段   —— 直接扫 14-桥段库 各族文件的条目标题现数，与 build_vignette_index 同一判据
@@ -33,8 +34,16 @@ def cn(t):
     return len(re.findall(r"[一-鿿]", t))
 
 
+# 不入库的目录（见 .gitignore）。它们在本机有、在别人 clone 出来的仓库里没有。
+# 篇数、汉字、表格数这几个数印在 README 上给别人看，必须是**别人能数出来的数**。
+# 曾经印 135 篇，而 fresh clone 只有 120 篇——差的 15 篇全在这两个目录里。
+NOT_SHIPPED = ("09-拆解卡", "10-藏书索引")
+
+
 def stats():
-    md = sorted(p for p in LIB.rglob("*.md") if "_整理后" not in str(p))
+    md = sorted(p for p in LIB.rglob("*.md")
+                if "_整理后" not in str(p)
+                and not any(d in p.parts for d in NOT_SHIPPED))
     texts = {p: p.read_text(encoding="utf-8", errors="ignore") for p in md}
     s = {
         "篇数": len(md),
@@ -50,7 +59,11 @@ def stats():
     s["术语04"] = count("02-术语百科/04-尺度预警与社群黑话.md", r"^#### ")
     s["辨析组"] = count("02-术语百科/05-易混淆词辨析.md",
                         r"^### +[⓪①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]")
-    s["拆解卡"] = len([p for p in (LIB / "09-拆解卡").glob("*.md")])
+    # 精读笔记（原 09 卷）与 10-藏书索引 一样是本机私有、不入库的。
+    # fresh clone 上两者都不在，这里给 None 而不是 0——0 会被下面的
+    # suspects 当成真值去比对库内的手写数字，把「本机没有」误报成「写错了」。
+    cards_dir = LIB / "09-拆解卡"
+    s["精读笔记"] = len(list(cards_dir.glob("*.md"))) if cards_dir.is_dir() else None
     s["排期表"] = count("10-藏书索引/精读排期表.md", r"^\| *\d+ *\|")
     s["模板JSON"] = len(list((LIB / "11-模板包").rglob("*.json")))
     s["角色卡"] = len(list((LIB / "11-模板包" / "角色卡").glob("*.json")))
@@ -193,7 +206,10 @@ def main():
 
     print("当期真值：")
     for k, v in s.items():
-        print(f"  {k:10} {v:,}" if isinstance(v, int) else f"  {k:10} {v}")
+        if v is None:                 # 本机私有、不入库的那几项，缺了不算错
+            print(f"  {k:10} —（本机无此目录）")
+        else:
+            print(f"  {k:10} {v:,}" if isinstance(v, int) else f"  {k:10} {v}")
     print("\n生成的统计行：")
     print("  " + scale)
     print("  " + corpus)

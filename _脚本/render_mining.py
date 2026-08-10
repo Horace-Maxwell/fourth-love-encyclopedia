@@ -159,6 +159,12 @@ def clean_names():
     return f, m, amb + x
 
 
+# 宗门必须以宗门后缀收尾。「行动派」是「是个行动派」剥完的残留，
+# 「派」虽是宗门后缀，但前面得是专名才算。
+SECT_OK = re.compile(r"(宗|派|门|阁|殿|谷|山庄|书院|仙宗|剑派|教|盟)$")
+SECT_NO = re.compile(r"^(行动|乐天|悲观|保守|激进|温和|强硬|实干|理想|现实)")
+
+
 def clean_sect():
     """宗门：「回了合欢宗」这类前缀带动词的，归并到已知的短名上。"""
     s = C("sect")
@@ -167,14 +173,66 @@ def clean_sect():
     for name, n in s.items():
         base = next((t for t in short if t != name and name.endswith(t)), None)
         out[base or name] += n
-    return Counter({k: v for k, v in out.items()
-                    if v >= 8 and not AD.search(k) and len(k) >= 3})
+    c = _clean_title(out, 8)
+    return Counter({k: v for k, v in c.items()
+                    if SECT_OK.search(k) and not SECT_NO.match(k)})
+
+
+# 抽取时名号前面会粘上一个动词、量词或连词：
+#   「是个行动派」「成为皇太女」「看着小王爷」「没想到王爷」「恭喜王爷」
+#   「一拥而上将」「只要王爷」「不知道将军」「可是将军」「想到祝将军」
+# 单篇里量小看不见，聚合成榜之后满屏都是。TAIL_JUNK 管的是尾部粘连，
+# 这一条管头部——两头都要剥，中间才是真名号。
+HEAD_JUNK = re.compile(
+    r"^(?:是个|是位|这位|那位|一位|这个|那个|一个|个|是|"
+    r"成为|变成|做了|当上|封为|册封|敕封|受封|"
+    r"看着|望着|听着|见到|遇到|想到|没想到|不知道|知道|"
+    r"听见|看见|看向|望向|冲着|对着|朝着|走向|走进|走出|来到|回到|去了|进了|出了|"
+    r"恭喜|多谢|谢过|拜见|参见|回禀|禀报|启禀|敢问|请问|"
+    r"只要|但是|可是|然而|于是|因为|所以|如果|即便|哪怕|"
+    r"一拥而上|连忙|急忙|赶紧|立刻|忽然|竟然|果然|居然|"
+    r"为|给|向|对|跟|同|和|与|被|让|叫|请|求|替|帮|从|在|去|到|了|着|过)")
+# 剥完仍带这些字的，说明整段就是句子片段而不是名号
+VERBISH = re.compile(r"[看听想说知问答走来去做当成变]")
+# 剥前缀剥不掉的四类，逐条补：
+#   ①「一拥而上将」——成语粘了下一个字，剥前缀会剩单字所以躲过了检查
+#   ②「皇帝和丞相」「三大元帅」——连词或数量词把两个名号连成一串
+#   ③「位汉室亲王」「今日将军」「若是王爷」——量词/时间词/连词残片开头
+#   ④「参加皇太女」——动词没进 HEAD_JUNK 表
+# 判据：整词里含连词、或以这些残片开头，一律不是一个名号。
+NOT_TITLE = re.compile(
+    r"[和与及跟同或]"                       # 连词把两个名号连起来
+    r"|^(?:一拥而上|位|今日|昨日|明日|当日|若是|要是|就是|还是|正是|"
+    r"参加|参与|担任|出任|接任|继任|身为|作为|贵为|号称|人称|自称)"
+    r"|^[三四五六七八九十百千][大小]")       # 「三大元帅」是数量短语
+
+
+def _strip_head(n):
+    """循环剥前缀，最多三次（「是个」「一位」可能叠加）。"""
+    for _ in range(3):
+        n2 = HEAD_JUNK.sub("", n)
+        if n2 == n or len(n2) < 2:
+            break
+        n = n2
+    return n
+
+
+def _clean_title(c, minv, maxlen=8):
+    """名号类榜单（宗门/封号/官职/职业）的共用清洗。"""
+    out = Counter()
+    for k, v in c.items():
+        k = _strip_head(_strip_tail(k))
+        if len(k) < 2 or len(k) > maxlen:
+            continue
+        if VERBISH.search(k) or NOT_TITLE.search(k) or "的" in k or AD.search(k):
+            continue
+        out[k] += v
+    return Counter({k: v for k, v in out.items() if v >= minv})
 
 
 def clean_rank():
     """爵位：「帝国的将军」这类带的字的是普通名词短语，不是封号。"""
-    return Counter({k: v for k, v in C("rank").items()
-                    if v >= 15 and "的" not in k and not AD.search(k)})
+    return _clean_title(C("rank"), 15)
 
 
 def clean_phero():
@@ -206,29 +264,47 @@ PLACE_OK = re.compile(r"(城|镇|郡|宫|苑|楼|阁|斋|坊|巷|寨|港|域)$")
 PLACE_NO = re.compile(r"^(眼冒|教学|办公|写字|居民|商业|图书|实验|宿舍|电影|购物|"
                       r"价值|倾国|亭台|看着|整个|一座|这座|那座|回到|来到|去了|进了|"
                       r"出了|走出|走进|满城|全城|举国|倾城|连城)")
+# 地名的后缀全是单字（楼/宫/城/阁），前面粘任何词都能凑出一个假地名：
+# 「因为楼」「听见楼」「歪个楼」「两层楼」「公司楼」「烂尾楼」「整栋楼」。
+# 成语同理：黑云压城、众志成城、兵临城、大街小巷。
+# 还有一类最糟的——「从子宫」剥掉「从」剩「子宫」，那是器官不是地名。
+PLACE_JUNK = re.compile(
+    r"^(两层|三层|多层|整栋|整幢|一栋|公司|烂尾|居民|办公|教学|写字|宿舍|"
+    r"歪个|歪楼|水楼|灌水|盖楼|顶楼|下楼|上楼|同楼|隔壁|对面|里面|外面|"
+    r"黑云|众志|兵临|大街|如今|最近|刚刚|已经|正在)"
+    r"|^(因为|所以|但是|可是|然而|如果|虽然|不过|而且|并且)"   # 连词开头
+    r"|^(子宫|迷宫|冷宫|东宫|西宫|龙宫|蜂王宫)$"      # 器官与泛称，不是具体地名
+    # 反向引用要用命名组：这一行前面已有三个括号组，写 \1 会指到第一组去。
+    # 单独测这条正则是对的，放进 PLACE_JUNK 就错——组编号是全局的。
+    r"|(?P<sfx>[城镇郡宫苑楼阁斋坊巷寨港域]).*(?P=sfx)"
+    r"|^(面|们|个|里|上|下|前|后|中|内|外|旁|边)."   # 剥完剩方位残片
+    r"|^(你|我|他|她|它)"                              # 代词开头
+    r"|^.$")                                          # 剥完只剩一个字
 
 
 def clean_place(names_all):
     out = Counter()
     for k, v in C("place").items():
-        if k in names_all or not PLACE_OK.search(k) or PLACE_NO.match(k):
+        k = _strip_head(_strip_tail(k))
+        if (k in names_all or not PLACE_OK.search(k) or PLACE_NO.match(k)
+                or PLACE_JUNK.search(k) or VERBISH.search(k)):
             continue
-        if v >= 8:
-            out[k] = v
-    return out
+        out[k] += v
+    return Counter({k: v for k, v in out.items() if v >= 8})
 
 
 def clean_clan():
-    bad = ("政府", "内务府", "官府", "出府", "回府")
-    return Counter({k: v for k, v in C("clan").items() if v >= 8 and k not in bad})
+    bad = ("政府", "内务府", "官府", "出府", "回府", "地府", "冥府")
+    c = Counter({k: v for k, v in C("clan").items() if k not in bad})
+    return _clean_title(c, 8)
 
 
 def clean_office():
-    return Counter({k: v for k, v in C("office").items() if v >= 20})
+    return _clean_title(C("office"), 20)
 
 
 def clean_job():
-    return Counter({k: v for k, v in C("job").items() if v >= 10})
+    return _clean_title(C("job"), 10)
 
 
 def clean_prop():
@@ -361,7 +437,7 @@ def main():
     L += table([(i + 1, k, f"{v:,}") for i, (k, v) in enumerate(given.most_common(120))],
                ["#", "字", "加权次数"])
     L += ["", "> **三类高频字**：自然意象（云／星／月／雪／风／青／棠）、",
-          "> 清冷质感（微／清／轻／渊／澜）、音译残留（莉／拉／斯／维）。",
+          "> 清冷冽（微／清／轻／渊／澜）、音译残留（莉／拉／斯／维）。",
           "> 缺席的同样有信息量：**言情常用的柔化字（婉／柔／娇／媚）在这份榜单上很靠后**。", "",
           "---", "", "## 四、命名格式分布", ""]
     tot_s = sum(styles.values())
@@ -582,7 +658,7 @@ def main():
           "> ⚠️ **统计口径**：标志词命中次数，不是场景出现次数。",
           "> 一场戏可能命中多个词，长篇也会重复命中。",
           "> 因此**横向比较各场景的相对高低是可靠的，绝对次数不宜直接引用。**", "",
-          "相关：[[05-剧情套路]]、[[09-拆解卡]]", ""]
+          "相关：[[05-剧情套路]]", ""]
     sizes["05-名场面分布.md"] = w("05-名场面分布.md", L)
 
     # ── README ──────────────────────────────────────────────────

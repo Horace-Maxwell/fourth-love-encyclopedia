@@ -84,10 +84,13 @@ def doctor():
     cn = sum(len(re.findall(r"[一-鿿]", p.read_text(encoding="utf-8", errors="ignore")))
              for p in md)
     cards = len(list((LIB / "11-模板包" / "角色卡").glob("*.json")))
-    cuts = len(list((LIB / "09-拆解卡").glob("*.md")))
+    # 精读笔记目录（原 09 卷）不入库，fresh clone 上没有——报「本机无」而不是 0，
+    # 0 会读成「一篇都没读过」，那是另一件事
+    notes_dir = LIB / "09-拆解卡"
+    notes = len(list(notes_dir.glob("*.md"))) if notes_dir.is_dir() else None
     print(f"\n规模      {cn/10000:.1f} 万汉字 / {len(md)} 篇")
     print(f"角色卡    {cards} 张")
-    print(f"拆解卡    {cuts} 张")
+    print(f"精读笔记  {notes if notes is not None else '—（本机无，该目录不入库）'}")
 
     print("\n── 检查项 ──")
     for cmd, why in CHECK:
