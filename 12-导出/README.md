@@ -72,7 +72,7 @@ cd ../tavern-study && A=$(grep '^AUTH_TOKEN' .dev.vars | cut -d= -f2- | tr -d ' 
 
 ### 已知限制：向量检索不可用
 
-本机 `wrangler.toml` 移除了 `[[vectorize]]` 与 `[ai]`（它们是云端专属绑定）。因此：
+本机 `wrangler.toml` 移除了 `[[vectorize]]` 与 `[ai]`，它们是云端专属绑定。因此：
 
 - ✅ 导入、装配、关键词触发全部正常
 - ❌ `/api/oc/search` 与 `backfill-vectors` 会报 `Cannot read properties of undefined (reading 'run')`
@@ -95,7 +95,7 @@ cd ../tavern-study && A=$(grep '^AUTH_TOKEN' .dev.vars | cut -d= -f2- | tr -d ' 
 
 `index.html` 在**仓库根目录**，4.4 MB，133 篇全文内嵌，双击即开，无需服务器、无外部依赖、断网可用。
 
-- 全文检索（含正文，不只标题）
+- 全文检索，含正文，不只标题
 - 跟随系统深浅色
 - 内置极简 Markdown 渲染，表格与代码块正常显示
 
@@ -112,4 +112,4 @@ python3 _脚本/build_exports.py
 
 改了主库就重跑。脚本会按 `VOLUME_CFG` 决定哪些卷进导出——
 `00-编纂规约`、`10-藏书索引`、`11-模板包`、`12-导出` 四个目录不导出
-（分别是编库规则、数据表、成品、导出物本身，注入进上下文只会稀释信号）。
+分别是编库规则、数据表、成品、导出物本身，注入进上下文只会稀释信号。
