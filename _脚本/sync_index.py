@@ -101,7 +101,16 @@ def stats():
             s["HTML篇数"] = int(m.group(1))
     s["表格数"] = sum(len(re.findall(r"^ *\|", t, re.M)) for t in texts.values())
 
-    from aggregate_corpus import CANON
+    # 语料派生统计只在本机算得出来：aggregate_corpus 一 import 就要读
+    # 10-藏书索引/_语料库.jsonl，而那个目录不入库。fresh clone 上必然没有。
+    # CLAUDE.md 早就写着「fresh clone 会自动跳过派生统计自查」，但这里没有守卫，
+    # 于是 `run.py check` 在别人机器上直接抛 FileNotFoundError 崩掉——
+    # 本机永远测不出这个，因为本机有那个文件。克隆一份跑一遍才看得见。
+    try:
+        from aggregate_corpus import CANON
+    except (FileNotFoundError, ImportError):
+        s["_无语料"] = True
+        return s
     s["语料篇数"] = CANON["分析口径篇数"]
     s["语料字数"] = CANON["分析口径字数"]
     s["独立作品"] = CANON["独立作品数"]
@@ -114,6 +123,8 @@ def stats():
 def build_lines(s):
     scale = (f"> 最后更新：2026-08 ｜ 当前规模：**{s['汉字']/10000:.1f} 万汉字 / "
              f"{s['篇数']} 篇**（{s['字符']/10000:.1f} 万字符）")
+    if s.get("_无语料"):
+        return scale, None          # 没有语料就不重写语料行，保留仓库里现成的
     corpus = (f"> 语料基础：**{s['语料篇数']:,} 篇 / {s['语料字数']/1e8:.2f} 亿字**"
               f"（原始 {s['原始文件']:,} 文件 → MD5 去重 {s['MD5去重']:,} → "
               f"剔除非本类型 {s['剔除']} 篇；其中 {s['独立作品']:,} 部为独立作品，"
@@ -168,8 +179,9 @@ def main():
     scale, corpus = build_lines(s)
     changed = []
 
-    # ① 全库正文的语料数字归一
-    for f in sorted(LIB.rglob("*.md")):
+    # ① 全库正文的语料数字归一。没有语料就跳过这一整段：
+    # 归一的依据是 CANON，拿不到 CANON 就无从判断哪个数字过期了。
+    for f in (sorted(LIB.rglob("*.md")) if not s.get("_无语料") else []):
         if "_整理后" in str(f) or f.name == "04-质量审计报告.md":
             continue
         t0 = f.read_text(encoding="utf-8")
@@ -184,12 +196,14 @@ def main():
         p = LIB / rel
         t0 = t = p.read_text(encoding="utf-8")
         t = re.sub(r"^> 最后更新：.*$", scale, t, count=1, flags=re.M)
-        t = re.sub(r"^> 语料基础：.*$", corpus, t, count=1, flags=re.M)
+        if corpus:
+            t = re.sub(r"^> 语料基础：.*$", corpus, t, count=1, flags=re.M)
         # README 的规模写在首段引用块里，格式不同
-        t = re.sub(r"^> \*\*2026-08 ｜ 当前规模：.*$",
-                   f"> **2026-08 ｜ 当前规模：{s['汉字']/10000:.1f} 万汉字 / {s['篇数']} 篇"
-                   f" ｜ 语料基础：{s['语料篇数']:,} 篇 / {s['语料字数']/1e8:.2f} 亿字**",
-                   t, count=1, flags=re.M)
+        if not s.get("_无语料"):
+            t = re.sub(r"^> \*\*2026-08 ｜ 当前规模：.*$",
+                       f"> **2026-08 ｜ 当前规模：{s['汉字']/10000:.1f} 万汉字 / {s['篇数']} 篇"
+                       f" ｜ 语料基础：{s['语料篇数']:,} 篇 / {s['语料字数']/1e8:.2f} 亿字**",
+                       t, count=1, flags=re.M)
         # README 首屏徽章行（`106.6 万汉字` ｜ `109 篇` ｜ `25,643 行表格` ｜ …）。
         # 教训：commit 48f4150 把规模数字改成徽章版式后，上面三条锚点全都不再命中，
         # 归一器静默跳过 README，1.9 万字的漂移就这么进了公开仓库。
@@ -212,7 +226,7 @@ def main():
             print(f"  {k:10} {v:,}" if isinstance(v, int) else f"  {k:10} {v}")
     print("\n生成的统计行：")
     print("  " + scale)
-    print("  " + corpus)
+    print("  " + (corpus or "（本机无语料，语料行保持仓库现状）"))
     print(f"\n{'需要更新' if check else '已更新'}：{changed or '无（已同步）'}")
 
     # ── 派生统计的自查 ──
