@@ -23,12 +23,16 @@
                 fresh clone 上不存在即跳过）
   I 成句引用    ≥25 字引号内容要么有出处、要么可辨识为社群言论/本库自撰
   J 去AI化      铁律 2 加粗 / 3 元评论 / 4 第二人称 / 5 破折号 / 6「不是X是Y」/
-                7 自我加冕 / 8 虚词（00-编纂规约/05；6 与 8 为本轮新增实现）
-  K 卡片        角色卡/情景卡/世界书 JSON 的字段、体量、安全框架、元评论、rating
+                7 自我加冕 / 8 虚词（00-编纂规约/05）。铁律 8「不用分号、括号里
+                不放带主谓的话」走 N 项的「长括号/千字」，不在这里
+  K 卡片        角色卡/情景卡/世界书 JSON 的字段、体量、安全框架、元评论、rating、
+                description 开头的「扮演方向：」声明
   L 桥段栏目    14 卷条目六栏目齐全、双向写法两个方向都覆盖
-  N 分布层     句长节奏、模式化句式、高危词的密度对齐真人语料实测
   M 渲染种子    _脚本/*.py 的中文字符串不得携带元评论/自我加冕/虚词——
                 机器生成卷的文风病根在种子层，产物层查不住（重跑就回灌）
+  N 分布层      句长节奏、模式化句式、高危词、长括号的密度对齐真人语料实测
+  O 列表编号    有序列表的编号必须递增。批量重排会把列表当散文重排，编号跟着
+                条目走，而数字/链接/篇幅/markdown 全对，别的闸门一个都看不见
 
 警告通道（⚠ 前缀，不计入返回码）：贴线预警（达到上限 90%）、表格密度下限、
 价值断言、祈使指导、「显然」、E 来源声明。
@@ -322,6 +326,32 @@ def main():
             if any(r in raw for r in CARD_RISK) and not all(k in raw for k in SAFETY_WORDS):
                 FAIL["K 高风险世界书缺 SSC/RACK/PRICK"].append(wf.stem)
 
+    # ── O 有序列表的编号必须递增 ──
+    # 这条是 2026-08 换骨架那两轮之后加的。改写脚本被要求「重排句序」，
+    # 它把有序列表也当成散文重排了：条目换了位置，编号跟着条目走，
+    # 于是红线第二节变成 5→4→2→1→3，参考文献的第 10 条被甩到第 15 条后面。
+    # 数字、链接、篇幅、markdown 全对，闸门全绿——**列表的顺序不在任何一道闸里**。
+    # 全库当时有 12 处。人眼扫不出来，做成检查项。
+    for p_o in content_files():
+        rel_o = str(p_o.relative_to(LIB))
+        lines_o = p_o.read_text(encoding="utf-8", errors="ignore").split("\n")
+        run, start = [], 0
+        def _flush():
+            if len(run) >= 3 and run != sorted(run):
+                FAIL["O 有序列表编号乱序"].append(
+                    f"{rel_o}:{start}｜{'→'.join(str(x) for x in run)}")
+        for i_o, l_o in enumerate(lines_o):
+            m_o = re.match(r"^(\d+)[.、]\s+\S", l_o)
+            if m_o:
+                if not run:
+                    start = i_o + 1
+                run.append(int(m_o.group(1)))
+            elif l_o.strip() == "":
+                continue                      # 项间空行不算断开
+            else:
+                _flush(); run = []
+        _flush()
+
     # ── L 桥段库（14 卷）──
     # 本库同时服务四爱女与四爱男，「双向写法」不是装饰而是硬要求：
     # 同一场戏从哪一边写，选的细节完全不同（她视角写玄关的灯，他视角写第三次端下来）。
@@ -458,6 +488,7 @@ def main():
     # 一次性升级会让 pre-commit 全红；改完之后（全库 0 触线）才升。
     # 行内豁免 `<!-- 例外:规则号 理由 -->` 仍然生效，报告末尾会列出全库豁免。
     from ai_taste import measure as _m, verdict as _v, card_texts as _ct
+    from ai_taste import card_setting_texts as _cst
     # 卡的开场白与备选开场是纯叙事，读者一开卡就看到，按小说标准查（narrative=True）。
     # description 是设定表、system_prompt 是指令，都不算叙事，不在此列。
     # 有的卡，记账就是那个人的性格——「男主-美强惨」的设定是他把每一份善意
@@ -471,6 +502,13 @@ def main():
         bad = _v(_m(ct), True)
         if bad:
             FAIL["N 卡的开场白：与真人写作的统计差距"].append(
+                f"{cf.parent.name}/{cf.stem}：{'；'.join(bad)}")
+    # 设定字段（personality/scenario）另一路，按说明文标准。
+    # 洞的来历与口径论证见 ai_taste.card_setting_texts 的 docstring。
+    for cf, ct in _cst(LIB):
+        bad = _v(_m(ct), False)
+        if bad:
+            FAIL["N 卡的设定字段：与真人写作的统计差距"].append(
                 f"{cf.parent.name}/{cf.stem}：{'；'.join(bad)}")
     for p5 in content_files():
         t5 = p5.read_text(encoding="utf-8", errors="ignore")

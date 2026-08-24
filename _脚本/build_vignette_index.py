@@ -261,7 +261,14 @@ def parse(p: Path):
         if not m:
             continue
         num, name = m.group(1), m.group(2)
-        rate = re.search(r"^`([GTME])` *｜ *(⚠️[^｜\n]+|无预警)", blk, re.M)
+        # 预警栏收三种写法：⚠️ 硬预警、△ 软标签、无预警。
+        # 原先只认前两种里的 ⚠️ 与「无预警」，只挂 △ 标签的条目匹配不上，
+        # rate 落到 None，分级**静默退回 T**——M 级条目在总表里显示成 T，
+        # 而四个检查器没有一个查这个。分级是安全元数据，不能靠默认值。
+        rate = re.search(r"^`([GTME])` *｜ *(⚠️[^｜\n]+|△[^｜\n]+|无预警)", blk, re.M)
+        if not rate:
+            print(f"  ⚠ {p.name}｜{num} · {name}：分级行读不出，暂按 T 记。"
+                  f"分级行体例见 00-编纂规约/01-分级与预警体系")
         skel = re.search(r"^\*\*骨架\*\*｜(.+?)$", blk, re.M)
         # GitHub 式锚点：小写、去标点（含「」，·等全角）、空格→连字符。
         # 曾直接用 {num}--{name}，带标点或大写字母的条目（她给钱，他不要 / KTV）在 GitHub 上全部断链。
