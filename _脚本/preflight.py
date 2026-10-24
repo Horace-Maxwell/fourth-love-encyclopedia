@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from paths import LIB
+from paths import CORPUS, LIB
 
 FAIL, WARN = [], []
 
@@ -34,6 +34,28 @@ BLOCKERS = [
 ]
 # 藏书清单的特征：连续多行「书名 + 作者」
 CATALOG = re.compile(r"(作者[：:]\s*\S+.*\n.*){5,}")
+
+
+def corpus_pack_names():
+    """藏书目录顶层的合集目录名与压缩包名（资源站打包时起的名字）。
+
+    06-发布风险评估 第 36 行曾把其中一个原样写进正文，从首个提交起就在公开仓库里，
+    上面那几条模式都拦不住它。只取 8 字以上的名字：「10」「女攻」这类短名
+    在正文里到处都是，拿来匹配只会误报。书名级的 .txt 不收，单部作品被分析时
+    正文本来就会提书名。fresh clone 上没有藏书目录，这一项自动跳过。
+    """
+    if not CORPUS.is_dir():
+        return []
+    names = set()
+    for p in CORPUS.iterdir():
+        if p.name.startswith((".", "_")):
+            continue
+        if p.is_dir() or p.suffix.lower() in (".zip", ".rar", ".7z"):
+            stem = p.name if p.is_dir() else p.stem
+            stem = stem.strip()
+            if len(stem) >= 8:
+                names.add(stem)
+    return sorted(names)
 
 
 def tracked_files():
@@ -60,6 +82,7 @@ def main():
     files = tracked_files()
     text_files = [p for p in files
                   if p.suffix in (".md", ".py", ".json", ".html", ".txt", ".yml", ".toml")]
+    packs = corpus_pack_names()
 
     for p in text_files:
         try:
@@ -74,6 +97,11 @@ def main():
                 if rel == "_脚本/paths.py":
                     continue
                 FAIL.append(f"{name}｜{rel}｜{len(hits)} 处｜样例 {str(hits[0])[:44]}")
+        for name in packs:
+            if name in t:
+                # 报告里不回显名字本身：这份输出可能被贴进 issue 或提交信息
+                FAIL.append(f"藏书合集目录名｜{rel}｜{len(name)} 字的合集名")
+                break
         if p.suffix == ".md" and CATALOG.search(t) and "作者" in t:
             n = len(re.findall(r"作者[：:]", t))
             if n >= 30:

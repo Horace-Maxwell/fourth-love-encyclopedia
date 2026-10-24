@@ -304,7 +304,53 @@ def mine_one(path_str: str):
 
 
 # ══ 合并 ══════════════════════════════════════════════════════════════
-def merge(results):
+AUTHOR = re.compile(r"(?:作者[：:]|\bby\s*)\s*([^\s.（(\[【〔，,]+)", re.I)
+
+
+def author_of(fname):
+    m = AUTHOR.search(fname or "")
+    # 「作者：Yolanda--1」这类重复下载留下的尾巴去掉
+    return re.sub(r"[-－—_]+\d*$", "", m.group(1)) if m else ""
+
+
+def work_groups(results, authors):
+    """把同一部作品的多份存档并成一组，返回每篇对应的组号。
+
+    先看出场最多的两个人名（只抽出一个就按一个），相同就并。快穿、np 这类书
+    常常只有女主一个名字出场够多。短篇、对白少的书一个名字都抽不出，
+    才退到文件名里的作者名。作者名只在这种书之间用：一位作者写过很多部，
+    拿作者名去并有名字的书，会把不同的作品并成一部（实测会并掉四成）。
+    偶尔会把两部主角同名的书并成一部，那只会让计数偏少，
+    对「跨 N 部才算套话」来说方向是保守的。
+    """
+    parent = list(range(len(results)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    first = {}
+    for i, r in enumerate(results):
+        if not r:
+            continue
+        top2 = sorted(r["names"], key=lambda n: -r["names"][n][0])[:2]
+        if top2:
+            keys = [("名", frozenset(top2))]
+        elif authors[i]:
+            keys = [("作者", authors[i])]
+        else:
+            keys = []
+        for k in keys:
+            if k in first:
+                parent[find(i)] = find(first[k])
+            else:
+                first[k] = i
+    return [find(i) for i in range(len(results))]
+
+
+def merge(results, authors=None):
     agg = {
         "names_f": Counter(), "names_m": Counter(), "names_x": Counter(),
         "name_docs": defaultdict(set),
@@ -315,10 +361,22 @@ def merge(results):
         "opening": [], "ch_title": Counter(), "scene": Counter(),
         "docs": 0,
     }
+    # 【同一部作品只算一次】main() 已按文件名归并过一遍，但归并不干净：
+    # 同一部作品换个书名、加个「（完结+番外）」就成了另一篇，单部作品的句子
+    # 靠它自己的几份存档凑够「跨 5 篇」，冒充成类型套话。2026-10 通读实测漏过：
+    # 「那是臣的姐姐，第五乔。」6 篇、某部的整本章节目录、带人名的称谓句。
+    # 这里再按主角名和作者名归一次（见 work_groups），每组只留第一篇。
+    # docs 仍按文件名归并后的篇数报（全库各卷引的基数就是它），
+    # 归并只管下面这些「跨几部」的计数：每组只取第一篇的抽取结果。
+    group = work_groups(results, authors or [""] * len(results))
+    seen = set()
     for i, r in enumerate(results):
         if not r:
             continue
         agg["docs"] += 1
+        if group[i] in seen:
+            continue
+        seen.add(group[i])
         for n, (c, g) in r["names"].items():
             agg[{"女": "names_f", "男": "names_m"}.get(g, "names_x")][n] += 1
             agg["name_docs"][n].add(i)
@@ -364,11 +422,14 @@ def main():
         files = files[:a.limit]
     print(f"待挖掘 {len(files):,} 篇，{a.workers} 进程\n")
 
-    results, done = [], 0
+    results, authors, done = [], [], 0
+    fname = {r["path"]: (r.get("文件名") or r["path"].rsplit("/", 1)[-1])
+             for r in _best.values()}
     with ProcessPoolExecutor(max_workers=a.workers) as ex:
-        futs = [ex.submit(mine_one, f) for f in files]
+        futs = {ex.submit(mine_one, f): f for f in files}
         for fut in as_completed(futs):
             done += 1
+            authors.append(author_of(fname[futs[fut]]))
             try:
                 results.append(fut.result())
             except Exception:
@@ -376,7 +437,7 @@ def main():
             if done % 500 == 0:
                 print(f"  {done:,}/{len(files):,}")
 
-    agg = merge(results)
+    agg = merge(results, authors)
     print(f"\n有效 {agg['docs']:,} 篇")
 
     # 序列化（Counter → 排序后的 list，避免 JSON 太大）

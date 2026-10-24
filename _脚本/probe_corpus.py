@@ -23,14 +23,15 @@ import unicodedata
 from pathlib import Path
 from collections import Counter, defaultdict
 
-from paths import LIB
+from paths import CORPUS, LIB
 
 # ── 路径配置 ──────────────────────────────────────────────────────────
 GB_ROOT = LIB.parent
-CORPUS_DIRS = [
-    GB_ROOT / "GB合集大乱炖×230p",
-    GB_ROOT / "[po]第四爱合集2024.3.27 9个",
-]
+# v1 只扫两个合集目录。目录名是资源站打包时起的名字，属于藏书清单信息，
+# 不写进公开仓库（preflight 会拦）。要重跑 v1 时用环境变量给出目录名，
+# 多个用 os.pathsep 隔开；全量扫描请用 probe_v2.py。
+CORPUS_DIRS = [CORPUS / n for n in
+               os.environ.get("GB_PROBE_V1_DIRS", "").split(os.pathsep) if n]
 OUT_DIR = GB_ROOT / "第四爱百科" / "10-藏书索引"
 OUT_JSON = OUT_DIR / "_藏书元数据.json"
 

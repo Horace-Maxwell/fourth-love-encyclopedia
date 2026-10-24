@@ -85,6 +85,11 @@ def table(rows, cols):
 
 adv = D["adv"]
 idiom = D["idiom"]
+# 本篇标 G 级，四字格榜里的露骨对白（「我要射了」）不上榜。
+# 词表与 render_mining 共用一份，两边各写一套迟早会漂。
+from render_mining import EXPLICIT  # noqa: E402
+
+idiom = [(w, n) for w, n in idiom if not EXPLICIT.search(w)]
 dlg = [(w, n) for w, n in idiom if DIALOGUE_LIKE.match(w)]
 nar = [(w, n) for w, n in idiom if not DIALOGUE_LIKE.match(w)]
 em = D["ending_marks"]

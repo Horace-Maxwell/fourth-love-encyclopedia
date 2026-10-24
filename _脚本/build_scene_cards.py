@@ -15,7 +15,7 @@
   · 方向平衡：AI 扮男主 15 张 / AI 扮女主 15 张，两边读者各半
   · 提示词层不适用去 AI 化铁律（加粗是模型信号），但**元评论仍禁**——
     上一轮实测 18 张角色卡在 system_prompt 里有元评论，白占上下文
-  · 全部角色成年；带 ⚠️ 的卡必须带安全框架（check_compliance K 项会查）
+  · 全部角色成年；预警从出处条目继承，带 ⚠️ 的卡必须带安全框架（K 项会查）
   · 不含任何藏书原文
 
 卡的内容在 scene_cards_data/ 包里（cards_core 为首轮 30 张，cards_31…cards_45
@@ -25,6 +25,7 @@
 """
 
 import json
+import re
 from pathlib import Path
 
 from paths import LIB
@@ -57,27 +58,90 @@ SAFE_BLOCK = """
 若 {{user}} 表示停止或不适，立刻退出该情境并转入日常。
 参照社群共识 SSC / RACK / PRICK：安全、理智、知情、可撤回。"""
 
+# 预警不在规训类时用这一段（成瘾、心理疾病、生育、暴力……），
+# SAFE_BLOCK 里的「规矩与责罚」套在这些卡上是错位的。
+GENERIC_SAFE = """
+
+【边界】
+双方均为成年人。本场景为虚构创作，涉及的现实议题只作场景，不提供可照做的细节或指导。
+若 {{user}} 表示停止或不适，立刻退出该情境并转入日常。"""
+
+# 与 check_compliance.py 的 CARD_RISK 同口径：带这些预警的卡挂 SAFE_BLOCK。
+KINK_RISK = ("⚠️主奴", "⚠️非自愿", "⚠️训诫", "⚠️囚禁", "⚠️重口", "⚠️调教")
+
 
 from scene_cards_data import ALL_CARDS as CARDS, ALL_DETAILS as DETAILS
+
+# ── 预警从出处条目继承 ────────────────────────────────────────────
+# 卡的 warn 原先全靠数据模块手填。2026-10 通读发现 121 张卡的出处条目带 ⚠️
+# 而卡上没有，四张直接标了 E；check_compliance 的 K 项是在 JSON 里找 ⚠️ 字串，
+# 卡里一个 ⚠️ 都没有，它就永远不触发。现在预警以桥段条目的分级行为准，
+# 数据模块里的 warn 只能加、不能减。
+VIGNETTE = LIB / "14-桥段库"
+WARN_TOKEN = re.compile(r"⚠️[^\s｜（(，,、）)]+")
+
+
+def _vignette_grades():
+    """{族名: {条目名: 分级行}}，族名去掉文件名的编号。"""
+    out = {}
+    for p in VIGNETTE.glob("[0-9][0-9]-*.md"):
+        if p.name.startswith("00-"):
+            continue
+        t = p.read_text(encoding="utf-8")
+        out[p.stem.split("-", 1)[1]] = {
+            m.group(1).strip(): m.group(2) for m in re.finditer(
+                r"^## [一二三四五六七八九十]+ · (.+)\n\n(`[TMEG/]+` ｜ .*)$", t, re.M)}
+    return out
+
+
+GRADES = _vignette_grades()
+
+
+def src_warnings(src):
+    """按卡的 src（「族 · 条目」，族名前可带编号）取出处条目的 ⚠️ 标签。
+
+    找不到出处返回 None，由 main() 统一报出来。同族重名的条目在卡名里
+    带「（族名）」后缀，查的时候去掉再试一次。
+    """
+    fam, _, title = src.partition(" · ")
+    entries = GRADES.get(re.sub(r"^\d+-", "", fam.strip()))
+    if entries is None:
+        return None
+    title = title.strip()
+    for t in (title, re.sub(r"（[^）]*）$", "", title)):
+        if t in entries:
+            return WARN_TOKEN.findall(entries[t])
+    return None
 
 
 def build(c):
     is_male = c["dir"] == "AI男"
     ai_role = "男主" if is_male else "女主"
     user_role = "女主" if is_male else "男主"
-    warn = c.get("warn", False)
+    tags = src_warnings(c["src"]) or []
+    extra = c.get("sys_extra", "")
+    if c.get("warn") or any(t in KINK_RISK for t in tags):
+        safe = SAFE_BLOCK
+    elif tags:
+        safe = GENERIC_SAFE
+    else:
+        safe = ""
+    # 族级 sys_extra 已经写了雷点的不重复
+    lei = (f"\n\n【雷点】\n本卡出自带 {' '.join(tags)} 预警的桥段，雷者勿入。"
+           if tags and "【雷点】" not in extra else "")
 
     desc = (
         f"> 扮演方向：AI 扮{ai_role}（{c['who'].split('，')[0]}），"
         f"{{{{user}}}} 扮{user_role}。\n"
-        f"> 桥段出处：{c['src']}｜分级 {c['rating']}｜{c['tag']}\n\n"
+        f"> 桥段出处：{c['src']}｜分级 {c['rating']}｜{c['tag']}\n"
+        + (f"> 预警：{' '.join(tags)}\n" if tags else "") + "\n"
         f"【{ai_role}是谁】\n{c['who']}\n\n"
         f"【他的核心】\n{c['core']}\n\n"
         f"【此刻的场面】\n{c['setting']}\n\n"
         f"【可取用的细节】\n{DETAILS[c['name']]}\n\n"
         f"【下一拍往哪走】\n{c['beat']}"
     )
-    sysp = with_deai(SYS_COMMON + (SAFE_BLOCK if warn else "") + c.get("sys_extra", ""))
+    sysp = with_deai(SYS_COMMON + safe + lei + extra)
     return make_card({
         "name": c["name"],
         "description": desc,
@@ -93,6 +157,14 @@ def build(c):
 
 
 def main():
+    # 闸门写成「必须做到」：开局卡只架开场，按元层级降级最高标 M；
+    # 每张卡都要能追到出处条目，不然它的预警就无从继承。
+    bad_e = [c["name"] for c in CARDS if c["rating"] == "E"]
+    lost = [c["name"] for c in CARDS if src_warnings(c["src"]) is None]
+    if bad_e or lost:
+        raise SystemExit("情景卡未生成：\n"
+                         + (f"  标了 E 级（开局卡最高 M）：{'、'.join(bad_e)}\n" if bad_e else "")
+                         + (f"  出处条目找不到：{'、'.join(lost)}\n" if lost else ""))
     OUT.mkdir(parents=True, exist_ok=True)
     for old in OUT.glob("*.json"):
         old.unlink()

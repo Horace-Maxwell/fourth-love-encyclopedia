@@ -308,14 +308,22 @@ def clean_job():
 
 
 def clean_prop():
-    return Counter({k: v for k, v in C("prop").items() if k in PROP_OK})
+    return Counter({k: v for k, v in C("prop").items()
+                    if k in PROP_OK and not EXPLICIT.search(k)})
 
 
 # 章节标题栏的价值在**命名法**，不在列出具体标题。
 # 因此除了跨作品门槛，再加两道：长度上限 12 字（超过就是在概括情节而非命名），
-# 以及露骨内容过滤（这一栏是 G 级，不该承载 E 级字面）。
-EXPLICIT = re.compile(r"[肏艹操屌鸡巴淫穴乳茎精液高潮射精肛交口交内射失禁漏尿"
-                      r"淫纹骚货贱货屁眼阴茎阴道乳头下体]")
+# 以及露骨内容过滤（这一卷标 G 级，不该承载 E 级字面）。
+# 原先写成了一个字符类 [...]，等于按单字过滤：「高」「交」「口」「内」都在里面，
+# 正常标题被成片误杀，而「给我舔」「不许射」这类整句反倒一条没拦（cmd 栏也没接这道滤网）。
+# 改成词表，并接到命令句、称谓实例、器物三栏。
+EXPLICIT = re.compile("|".join([
+    "肏", "艹", "屌", "鸡巴", "肉棒", "性器", "淫", "穴", "乳头", "乳房", "阴茎", "阴道",
+    "阴蒂", "精液", "射精", "射了", "要射", "许射", "准射", "高潮", "肛", "口交", "内射",
+    "失禁", "漏尿", "骚货", "贱货", "屁眼", "下体", "舔", "插进", "插入", "硬了", "湿了",
+    "假阳", "尿道", "跳蛋", "按摩棒", "情趣", r"[A-Za-z一-鿿]H{1,3}$",
+]))
 
 
 def clean_ch_title():
@@ -334,7 +342,8 @@ def clean_title_ex():
     out = {}
     for t, exs in D["title_ex"].items():
         keep = [(s, n) for s, n in exs
-                if len(s) <= 16 and n >= 5 and not AD.search(s)]
+                if len(s) <= 16 and n >= 5 and not AD.search(s)
+                and not EXPLICIT.search(s)]
         if keep:
             out[t] = keep[:8]
     return out
@@ -372,7 +381,8 @@ def main():
     # 命令句同样适用本卷的版权门槛：**≤16 字且跨 ≥5 篇**。
     # 早先只有称谓实例受此约束，命令句放到 26 字，于是漏出过一条 19 字的露骨原句。
     # 顺带一提，收紧长度不损失信息——本节的结论恰恰就是「命令句极短」。
-    cmd = Counter({k: v for k, v in D["cmd"] if len(k) <= 16 and v >= 5})
+    cmd = Counter({k: v for k, v in D["cmd"]
+                   if len(k) <= 16 and v >= 5 and not EXPLICIT.search(k)})
     sub = Counter({k: v for k, v in D["submit"]})
     pos = Counter({k: v for k, v in D["possess"]})
     scene = D["scene"]
@@ -703,7 +713,7 @@ def main():
           "约束的完整理由见 [00-编纂规约/03-版权与内容红线]。"
           "(../00-编纂规约/03-版权与内容红线.md) 1.2c。", "",
           "相关条目：[07-语言风格/04-反AI味指南](../07-语言风格/04-反AI味指南.md) · "
-          "[10-藏书索引](../10-藏书索引/亚型分布报告.md)", ""]
+          "[10-藏书索引](../10-藏书索引-公开/语料统计.md)", ""]
     sizes["README.md"] = w("README.md", L)
 
     print(f"13-语料挖掘/ 已生成（源：{DOCS:,} 篇正文）")
