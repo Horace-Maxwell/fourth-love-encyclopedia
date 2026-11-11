@@ -312,7 +312,7 @@ def mine_one(path_str: str):
     # 重叠窗口会把同一场戏按标记个数重复计数，且道具正则要在同一段文字上
     # 反复跑几十遍（长篇里标记上千个，实测能把单篇耗时拉高两个数量级）。
     # 跳过之后，一次命中 = 一场戏。
-    combos, seqs, props, worlds = set(), set(), set(), set()
+    combos, seqs, props, worlds, pairs = set(), set(), set(), set(), set()
     n = len(marks)
     i = 0
     while i < n:
@@ -327,6 +327,9 @@ def mine_one(path_str: str):
             # 组合签名只用情境族——反应族在哪一场戏里都可能出现，
             # 把它们写进签名会让同一个桥段裂成十几个组合。
             combos.add("+".join(sorted(uniq & SCENE_KEYS)))
+            # 两族共现：同一场戏里出现过这两个情境族。14-桥段库分级行的「做饭＋归家」引的是这个数
+            sk = sorted(uniq & SCENE_KEYS)
+            pairs.update(f"{a}+{b}" for x, a in enumerate(sk) for b in sk[x + 1:])
             worlds |= uniq & WORLD_KEYS
             # 有序节拍链：去重但保留首次出现顺序——这是「节拍链」那一格的数据源
             ordered, seen = [], set()
@@ -350,6 +353,7 @@ def mine_one(path_str: str):
     return {
         "fam": sorted(fam_present),      # 本篇出现过哪些节拍族
         "combo": sorted(combos),         # 本篇出现过哪些共现组合
+        "pair": sorted(pairs),           # 本篇哪些情境族两两同场过
         "seq": sorted(seqs),             # 本篇出现过哪些有序节拍链
         "prop": sorted(props),           # 本篇桥段窗口里的道具
         "world": sorted(worlds),         # 本篇属于哪些世界设定
@@ -376,7 +380,7 @@ def main():
         files = files[:a.limit]
     print(f"待挖掘 {len(files):,} 部独立作品，{a.workers} 进程\n")
 
-    fam = Counter(); combo = Counter(); seq = Counter(); prop = Counter()
+    fam = Counter(); combo = Counter(); seq = Counter(); prop = Counter(); pair = Counter()
     world = Counter()
     docs = hits = done = 0
     with ProcessPoolExecutor(max_workers=a.workers) as ex:
@@ -390,7 +394,7 @@ def main():
             if r:
                 docs += 1
                 hits += r["hit"]
-                fam.update(r["fam"]); combo.update(r["combo"])
+                fam.update(r["fam"]); combo.update(r["combo"]); pair.update(r["pair"])
                 seq.update(r["seq"]); prop.update(r["prop"])
                 world.update(r["world"])
             if done % 300 == 0:
@@ -406,6 +410,8 @@ def main():
         "min_react": MIN_REACT,
         "fam": fam.most_common(),
         "combo": combo.most_common(400),
+        # 情境族两两同场的作品数（分母同 combo，用 hits）
+        "pair": pair.most_common(),
         "seq": seq.most_common(400),
         # 全局道具频次（跨 ≥8 部不同作品才留）
         "prop": [(w, c) for w, c in prop.most_common() if "\t" not in w and c >= 8],

@@ -30,15 +30,15 @@ import argparse
 from pathlib import Path
 from collections import Counter, defaultdict
 
-ROOT = CORPUS
-DEST = ROOT / "_整理后"
-
 # 复用聚合器的词表与清洗逻辑
 import sys
 
 from paths import CORPUS, JSONL
 from paths import require_corpus
 sys.path.insert(0, str(Path(__file__).parent))
+
+ROOT = CORPUS
+DEST = ROOT / "_整理后"
 
 
 # ══ 归类规则 ══════════════════════════════════════════════════════════
